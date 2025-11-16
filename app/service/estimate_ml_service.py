@@ -13,10 +13,6 @@ import math
 from PIL import Image, ImageDraw, ImageFont
 from pathlib import Path
 
-import logging
-
-logger = logging.getLogger(__name__)
-
 
 # ============================================================================
 # 1. 설정
@@ -168,7 +164,8 @@ def estimate_torch_vision(cv_response_json) :
         print(f"\n[MAPPING]")
         print(f"  Damage types: {list(mapping['damage_to_id'].keys())}")
     except Exception as e:
-        logger.error(f"Mapping 로드 실패: {e}")
+        print('mapping 로드 실패')
+        #logger.error(f"Mapping 로드 실패: {e}")
         
 
     # ============================================================================
@@ -191,7 +188,8 @@ def estimate_torch_vision(cv_response_json) :
         print(f"  Classes: {num_classes}")
         print(f"  ✓ Model loaded")
     except Exception as e:
-        logger.error(f"모델 로드 실패: {e}")
+        print('모델 로드 실패')
+        #logger.error(f"모델 로드 실패: {e}")
         
 
     # ============================================================================
@@ -212,7 +210,8 @@ def estimate_torch_vision(cv_response_json) :
             print(f"  {tag}: {prob:.2%}")
         
     except Exception as e:
-        logger.error(f"Classification 결과 로드 실패: {e}")
+        print('분류 결과 로드 실패')
+        #logger.error(f"Classification 결과 로드 실패: {e}")
         
 
     # ============================================================================
@@ -222,10 +221,11 @@ def estimate_torch_vision(cv_response_json) :
     print(f"\n[MODEL 2 - DETECTION]")
 
     if not os.path.exists(cv_response_json['save_path']):
-        logger.error(f"추론 대상 이미지 로드 실패")
+        print('추론 대상 이미지 로드 실패')
+        #logger.error(f"추론 대상 이미지 로드 실패")
         
     # Model 2 결과 정리
-        model2_results = []
+    model2_results = []
         
     try:
         # 파손 이미지 로드
@@ -299,7 +299,8 @@ def estimate_torch_vision(cv_response_json) :
             })
         
     except Exception as e:
-        logger.error(f"Detection 추론 실패: {e}")
+        print('detection 추론 실패')
+        #logger.error(f"Detection 추론 실패: {e}")
         import traceback
         traceback.print_exc()
         
@@ -390,7 +391,8 @@ def estimate_torch_vision(cv_response_json) :
     try :
         font = get_system_font(VISUALIZATION_CONFIG['text_font_size'])
     except Exception as e:
-        logger.error(f"시스템 폰트 로드 get_system_font() 실패: {e}")
+        #logger.error(f"시스템 폰트 로드 get_system_font() 실패: {e}")
+        print('시스템 폰트 로드 실패')
         
     
     # 박스 및 텍스트 그리기
@@ -509,7 +511,8 @@ def estimate_torch_vision(cv_response_json) :
             json.dump(inference_result, f, indent=2, ensure_ascii=False)
         print(f"\n✓ Saved inference result: {inference_json_filename}")
     except Exception as e:
-        logger.error(f"Failed to save inference result : {e}")
+        #logger.error(f"Failed to save inference result : {e}")
+        print('failed to save result')
         import traceback
         traceback.print_exc()
 
@@ -546,7 +549,8 @@ def estimate_torch_vision(cv_response_json) :
             json.dump(cost_result, f, indent=2, ensure_ascii=False)
         print(f"\n✓ Saved cost result: {cost_json_filename}")
     except Exception as e:
-        logger.error(f"Failed to save cost result : {e}")
+        #logger.error(f"Failed to save cost result : {e}")
+        print('failed to save cost result ')
         import traceback
         traceback.print_exc()
 
