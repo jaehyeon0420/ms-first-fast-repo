@@ -13,6 +13,23 @@ import math
 from PIL import Image, ImageDraw, ImageFont
 from pathlib import Path
 
+
+import logging
+import sys
+
+# 로거 설정
+logging.basicConfig(
+    level=logging.INFO,
+    stream=sys.stdout,  # stdout으로 출력
+    format='%(asctime)s [%(levelname)s] %(message)s',
+)
+
+logger = logging.getLogger(__name__)
+
+# 사용 예
+
+
+
 # ============================================================================
 # 1. 설정
 # ============================================================================
@@ -21,8 +38,8 @@ current_file = Path(__file__).resolve()
 APP_PATH = current_file.parent.parent  # service 상위 폴더 = app
 
 # 모델 파일 path
-MODEL_PATH = APP_PATH / "model\maskrcnn_model_final.pth"
-MAPPING_PATH = APP_PATH / "model\damage_type_mapping.json"
+MODEL_PATH = APP_PATH / "model" / "maskrcnn_model_final.pth"
+MAPPING_PATH = APP_PATH / "model" / "damage_type_mapping.json"
 
 # 출력 파일 path
 RESULT_PATH = APP_PATH / "ml_outputs"
@@ -48,10 +65,6 @@ DAMAGE_TYPE_KR = {
     "breakage": "깨짐",
     "separate": "도색손상"
 }
-
-print(f"[CONFIG]")
-print(f"  Confidence threshold: {CONFIDENCE_THRESHOLD*100:.0f}%")
-print(f"  Unit costs: {UNIT_COSTS}")
 
 
 # ★★★ 시각화 최적화 설정 (작은 이미지용)
@@ -167,7 +180,7 @@ def estimate_torch_vision(cv_response_json) :
         print(f"\n[MAPPING]")
         print(f"  Damage types: {list(mapping['damage_to_id'].keys())}")
     except Exception as e:
-        print(f"[ERROR] Mapping 로드 실패: {e}")
+        logger.error(f"Mapping 로드 실패: {e}")
         exit(1)
 
     # ============================================================================
@@ -190,7 +203,7 @@ def estimate_torch_vision(cv_response_json) :
         print(f"  Classes: {num_classes}")
         print(f"  ✓ Model loaded")
     except Exception as e:
-        print(f"[ERROR] 모델 로드 실패: {e}")
+        logger.error(f"모델 로드 실패: {e}")
         exit(1)
 
     # ============================================================================
@@ -211,7 +224,7 @@ def estimate_torch_vision(cv_response_json) :
             print(f"  {tag}: {prob:.2%}")
         
     except Exception as e:
-        print(f"[ERROR] Classification 결과 로드 실패: {e}")
+        logger.error(f"Classification 결과 로드 실패: {e}")
         exit(1)
 
     # ============================================================================
@@ -221,7 +234,7 @@ def estimate_torch_vision(cv_response_json) :
     print(f"\n[MODEL 2 - DETECTION]")
 
     if not os.path.exists(cv_response_json['save_path']):
-        print(f"  ✗ Image not found ")
+        logger.error(f"추론 대상 이미지 로드 실패: {e}")
         exit(1)
 
     try:
@@ -297,7 +310,7 @@ def estimate_torch_vision(cv_response_json) :
             })
         
     except Exception as e:
-        print(f"[ERROR] Detection 추론 실패: {e}")
+        logger.error(f"Detection 추론 실패: {e}")
         import traceback
         traceback.print_exc()
         exit(1)
@@ -383,7 +396,13 @@ def estimate_torch_vision(cv_response_json) :
     print(f"  Upscaled to: {new_width}×{new_height} (factor: {upscale_factor}x)")
     
     draw = ImageDraw.Draw(image_viz)
-    font = get_system_font(VISUALIZATION_CONFIG['text_font_size'])
+    
+    font = ''
+    try :
+        font = get_system_font(VISUALIZATION_CONFIG['text_font_size'])
+    except Exception as e:
+        logger.error(f"시스템 폰트 로드 get_system_font() 실패: {e}")
+        exit(1)
     
     # 박스 및 텍스트 그리기
     for i, (label, score, box) in enumerate(zip(labels_final, scores_final, boxes_final)):
@@ -501,7 +520,7 @@ def estimate_torch_vision(cv_response_json) :
             json.dump(inference_result, f, indent=2, ensure_ascii=False)
         print(f"\n✓ Saved inference result: {inference_json_filename}")
     except Exception as e:
-        print(f"\n✗ Failed to save inference result: {e}")
+        logger.error(f"Failed to save inference result : {e}")
         import traceback
         traceback.print_exc()
 
@@ -538,7 +557,7 @@ def estimate_torch_vision(cv_response_json) :
             json.dump(cost_result, f, indent=2, ensure_ascii=False)
         print(f"\n✓ Saved cost result: {cost_json_filename}")
     except Exception as e:
-        print(f"\n✗ Failed to save cost result: {e}")
+        logger.error(f"Failed to save cost result : {e}")
         import traceback
         traceback.print_exc()
 
