@@ -220,7 +220,7 @@ def estimate_torch_vision(cv_response_json) :
 
     print(f"\n[MODEL 2 - DETECTION]")
 
-    if not os.path.exists(cv_response_json['save_path']):
+    if not os.path.exists(APP_PATH / "uploads" / cv_response_json['image_file'][:8] / cv_response_json['image_file']):
         print('추론 대상 이미지 로드 실패')
         #logger.error(f"추론 대상 이미지 로드 실패")
         
@@ -229,7 +229,7 @@ def estimate_torch_vision(cv_response_json) :
         
     try:
         # 파손 이미지 로드
-        image = Image.open(cv_response_json['save_path']).convert('RGB')
+        image = Image.open(APP_PATH / "uploads" / cv_response_json['image_file'][:8] / cv_response_json['image_file']).convert('RGB')
         image_width, image_height = image.size
         print(f"  Image size: {image_width}×{image_height}")
         
@@ -521,7 +521,7 @@ def estimate_torch_vision(cv_response_json) :
     # ============================================================================
 
     cost_result = {
-        "image_file": os.path.basename(cv_response_json['save_path']),
+        "image_file": os.path.basename(APP_PATH / "uploads" / cv_response_json['image_file'][:8] / cv_response_json['image_file']),
         "image_size": [image_width, image_height],
         "model1_probabilities": {
             DAMAGE_TYPE_KR.get(k, k): round(v, 4) 
