@@ -174,15 +174,23 @@ def estimate_torch_vision(cv_response_json) :
     # ============================================================================
 
     try:
+        print(f' Model test1')
         num_classes = len(mapping['damage_to_id'])
+        print(f' Model test2')
         model = maskrcnn_resnet50_fpn(pretrained=True)
+        print(f' Model test3')
         in_features = model.roi_heads.box_predictor.cls_score.in_features
+        print(f' Model test4')
         model.roi_heads.box_predictor = FastRCNNPredictor(in_features, num_classes)
+        print(f' Model test5')
         in_features_mask = model.roi_heads.mask_predictor.conv5_mask.in_channels
+        print(f' Model test6')
         model.roi_heads.mask_predictor = MaskRCNNPredictor(in_features_mask, 256, num_classes)
-        
+        print(f' Model test7')
         model_state_dict = torch.load(MODEL_PATH, map_location='cpu', weights_only=False)
+        print(f' Model test8')
         model.load_state_dict(model_state_dict)
+        print(f' Model test9')
         model.eval()
         
         print(f"\n[MODEL]")
