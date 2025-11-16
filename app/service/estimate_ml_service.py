@@ -238,6 +238,7 @@ def estimate_torch_vision(cv_response_json) :
         image_tensor = torchvision.transforms.ToTensor()(image)
         
         # 추론 
+        model.eval()
         with torch.no_grad():
             predictions = model([image_tensor])
         
