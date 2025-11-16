@@ -28,6 +28,30 @@ from fastapi import FastAPI
 #Service Module
 from app.api import estimate
 
+import logging
+import sys
+from fastapi import FastAPI
+
+# ============================================
+# ★ ACA 로그 출력용 루트 로거 설정
+# ============================================
+logger = logging.getLogger()
+logger.setLevel(logging.INFO)
+
+# 기존 핸들러 제거 (uvicorn 기본 설정 제거)
+if logger.hasHandlers():
+    logger.handlers.clear()
+
+# stdout 또는 stderr 둘 중 하나 선택
+handler = logging.StreamHandler(sys.stdout)
+
+formatter = logging.Formatter(
+    '%(asctime)s [%(levelname)s] %(name)s - %(message)s'
+)
+handler.setFormatter(formatter)
+
+logger.addHandler(handler)
+
 app = FastAPI(title="Demo FastAPI for Spring")
 
 # app/api/uploadImage.py 라우터들을 FastAPI 애플리케이션에 등록. endpoint prefix는 /fastapi/image, 태그는 hello로 설정

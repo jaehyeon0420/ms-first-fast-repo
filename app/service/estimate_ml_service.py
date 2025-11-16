@@ -14,24 +14,8 @@ from PIL import Image, ImageDraw, ImageFont
 from pathlib import Path
 
 import logging
-import sys
 
-# 루트 로거 설정
-logger = logging.getLogger()
-logger.setLevel(logging.INFO)
-
-# 스트림 핸들러 설정 (stderr 권장)
-handler = logging.StreamHandler(sys.stderr)
-formatter = logging.Formatter('%(asctime)s [%(levelname)s] %(message)s')
-handler.setFormatter(formatter)
-
-# 기존 핸들러 제거 후 추가
-if logger.hasHandlers():
-    logger.handlers.clear()
-logger.addHandler(handler)
-
-# 사용 예
-
+logger = logging.getLogger(__name__)
 
 
 # ============================================================================
