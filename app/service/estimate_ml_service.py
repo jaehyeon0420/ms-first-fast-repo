@@ -222,9 +222,11 @@ def estimate_torch_vision(cv_response_json) :
     print(f"\n[MODEL 2 - DETECTION]")
 
     if not os.path.exists(cv_response_json['save_path']):
-        logger.error(f"추론 대상 이미지 로드 실패: {e}")
+        logger.error(f"추론 대상 이미지 로드 실패")
         
-
+    # Model 2 결과 정리
+        model2_results = []
+        
     try:
         # 파손 이미지 로드
         image = Image.open(cv_response_json['save_path']).convert('RGB')
@@ -278,8 +280,7 @@ def estimate_torch_vision(cv_response_json) :
         
         print(f"  Final detections: {len(labels_final)}")
         
-        # Model 2 결과 정리
-        model2_results = []
+        
         for label, score, box in zip(labels_final, scores_final, boxes_final):
             damage_type = mapping['id_to_damage'].get(str(label), 'Unknown')
             x1, y1, x2, y2 = box.astype(int)
