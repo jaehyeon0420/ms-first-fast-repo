@@ -1,0 +1,33 @@
+version: 1
+disable_existing_loggers: false
+
+formatters:
+  standard:
+    format: '%(asctime)s [%(levelname)s] %(name)s - %(message)s'
+
+handlers:
+  console:
+    class: logging.StreamHandler
+    level: INFO
+    formatter: standard
+    stream: ext://sys.stdout   # ACA에서 stdout 캡처
+
+loggers:
+  uvicorn:
+    level: INFO
+    handlers: [console]
+    propagate: true
+
+  uvicorn.error:
+    level: INFO
+    handlers: [console]
+    propagate: true
+
+  uvicorn.access:
+    level: INFO
+    handlers: [console]
+    propagate: false
+
+root:
+  level: INFO
+  handlers: [console]
