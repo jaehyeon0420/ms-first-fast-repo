@@ -1,0 +1,79 @@
+*.pyc
+.env
+app/uploads/
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.pkl
+*.sqlite3
+
+# Virtual environments
+env/
+venv/
+ENV/
+.venv/
+
+# FastAPI / Uvicorn
+*.log
+
+# Byte-compiled / optimized / DLL files
+*.pyc
+*.pyo
+*.pyd
+*.so
+*.dll
+
+# Distribution / packaging
+build/
+dist/
+*.egg-info/
+.eggs/
+
+# Unit test / coverage reports
+htmlcov/
+.tox/
+.nox/
+coverage.xml
+.coverage
+.coverage.*
+
+# IDE / Editor
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Environment variables / secrets
+.env
+.env.*
+!.env.example
+
+# PyInstaller
+*.manifest
+*.spec
+
+# MyPy
+.mypy_cache/
+
+# Pyre
+.pyre/
+
+# Ruff / Flake8
+.ruff_cache/
+.flake8
+
+# Docker
+docker-data/
+**/Dockerfile-*
+
+# Logs & temp
+*.log
+*.tmp
+*.temp
+
+# Local files
+*.local
+app/ml_outputs/

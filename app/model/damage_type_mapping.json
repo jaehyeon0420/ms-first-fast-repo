@@ -1,0 +1,16 @@
+{
+  "damage_to_id": {
+    "__background__": 0,
+    "Crushed": 1,
+    "Separated": 2,
+    "Breakage": 3,
+    "Scratched": 4
+  },
+  "id_to_damage": {
+    "0": "__background__",
+    "1": "Crushed",
+    "2": "Separated",
+    "3": "Breakage",
+    "4": "Scratched"
+  }
+}
