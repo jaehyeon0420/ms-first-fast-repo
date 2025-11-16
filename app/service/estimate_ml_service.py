@@ -181,7 +181,7 @@ def estimate_torch_vision(cv_response_json) :
         print(f"  Damage types: {list(mapping['damage_to_id'].keys())}")
     except Exception as e:
         logger.error(f"Mapping 로드 실패: {e}")
-        exit(1)
+        
 
     # ============================================================================
     # maskrcnn_model_final.pth 로드
@@ -195,7 +195,7 @@ def estimate_torch_vision(cv_response_json) :
         in_features_mask = model.roi_heads.mask_predictor.conv5_mask.in_channels
         model.roi_heads.mask_predictor = MaskRCNNPredictor(in_features_mask, 256, num_classes)
         
-        model_state_dict = torch.load(MODEL_PATH, map_location='cpu')
+        model_state_dict = torch.load(MODEL_PATH, map_location='cpu', weights_only=False)
         model.load_state_dict(model_state_dict)
         model.eval()
         
@@ -204,7 +204,7 @@ def estimate_torch_vision(cv_response_json) :
         print(f"  ✓ Model loaded")
     except Exception as e:
         logger.error(f"모델 로드 실패: {e}")
-        exit(1)
+        
 
     # ============================================================================
     # Custom Vision 모델 결과 로드
@@ -225,7 +225,7 @@ def estimate_torch_vision(cv_response_json) :
         
     except Exception as e:
         logger.error(f"Classification 결과 로드 실패: {e}")
-        exit(1)
+        
 
     # ============================================================================
     # Torch Vision Detection 모델 추론 시작
@@ -235,7 +235,7 @@ def estimate_torch_vision(cv_response_json) :
 
     if not os.path.exists(cv_response_json['save_path']):
         logger.error(f"추론 대상 이미지 로드 실패: {e}")
-        exit(1)
+        
 
     try:
         # 파손 이미지 로드
@@ -313,7 +313,7 @@ def estimate_torch_vision(cv_response_json) :
         logger.error(f"Detection 추론 실패: {e}")
         import traceback
         traceback.print_exc()
-        exit(1)
+        
 
     # ============================================================================
     # 비용 계산
@@ -402,7 +402,7 @@ def estimate_torch_vision(cv_response_json) :
         font = get_system_font(VISUALIZATION_CONFIG['text_font_size'])
     except Exception as e:
         logger.error(f"시스템 폰트 로드 get_system_font() 실패: {e}")
-        exit(1)
+        
     
     # 박스 및 텍스트 그리기
     for i, (label, score, box) in enumerate(zip(labels_final, scores_final, boxes_final)):
