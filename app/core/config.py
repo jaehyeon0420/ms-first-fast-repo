@@ -9,6 +9,7 @@ class Settings(BaseSettings):
     CUSTOM_VISION_ENDPOINT: str
     CUSTOM_VISION_PROJECT_ID : str
     CUSTOM_VISION_MODEL_NAME : str
+    MODEL_BLOB_URL : str
     
     
     class Config:

@@ -14,6 +14,11 @@ from PIL import Image, ImageDraw, ImageFont
 from pathlib import Path
 import sys
 
+import urllib.request
+import urllib.error
+from app.core.config import settings
+MODEL_BLOB_URL = settings.MODEL_BLOB_URL
+
 
 # ============================================================================
 # 1. 설정
@@ -61,7 +66,67 @@ VISUALIZATION_CONFIG = {
     'text_offset_y': 25,      # 텍스트 Y 오프셋
 }
 
+# ============================================================================
+# 모델 다운로드 함수
+# ============================================================================
 
+def download_model_from_blob(blob_url, save_path):
+    """Azure Blob Storage에서 모델 다운로드"""
+    
+    # 이미 파일이 있고 크기가 정상이면 스킵
+    if save_path.exists():
+        file_size = save_path.stat().st_size
+        if file_size > 100_000_000:  # 100MB 이상이면 정상
+            print(f"  ✓ Model file already exists: {save_path}")
+            print(f"  File size: {file_size:,} bytes ({file_size / 1024 / 1024:.1f} MB)")
+            return True
+        else:
+            print(f"  ⚠ Existing file is too small ({file_size} bytes), redownloading...")
+            save_path.unlink()
+    
+    # 다운로드
+    print(f"\n[DOWNLOADING MODEL FROM BLOB STORAGE]")
+    print(f"  URL: {blob_url[:50]}...")
+    print(f"  Destination: {save_path}")
+    
+    try:
+        # 디렉토리 생성
+        save_path.parent.mkdir(parents=True, exist_ok=True)
+        
+        # 진행률 표시 함수
+        def reporthook(block_num, block_size, total_size):
+            downloaded = block_num * block_size
+            if total_size > 0:
+                percent = min(downloaded * 100.0 / total_size, 100)
+                mb_downloaded = downloaded / 1024 / 1024
+                mb_total = total_size / 1024 / 1024
+                sys.stdout.write(f"\r  Progress: {percent:.1f}% ({mb_downloaded:.1f}/{mb_total:.1f} MB)")
+                sys.stdout.flush()
+        
+        # 다운로드 실행
+        urllib.request.urlretrieve(blob_url, save_path, reporthook)
+        print()  # 줄바꿈
+        
+        # 검증
+        file_size = save_path.stat().st_size
+        print(f"  ✓ Download complete: {file_size:,} bytes ({file_size / 1024 / 1024:.1f} MB)")
+        
+        if file_size < 1000:
+            raise ValueError(f"Downloaded file is too small ({file_size} bytes)")
+        
+        return True
+        
+    except urllib.error.URLError as e:
+        print(f"  ✗ URL Error: {e}")
+        print(f"  Please check your MODEL_BLOB_URL")
+        return False
+    except Exception as e:
+        print(f"  ✗ Download failed: {e}")
+        if save_path.exists():
+            save_path.unlink()
+        return False
+    
+    
 # ============================================================================
 # 색상 맵
 # ============================================================================
@@ -170,27 +235,50 @@ def estimate_torch_vision(cv_response_json) :
         
 
     # ============================================================================
+    # 모델 다운로드 (Blob Storage에서)
+    # ============================================================================
+    
+    print(f"\n[MODEL DOWNLOAD CHECK]")
+    print(f"  Model path: {MODEL_PATH}")
+    print(f"  Blob URL configured: {MODEL_BLOB_URL != 'YOUR_BLOB_URL_HERE'}")
+    
+    # Blob Storage에서 다운로드
+    if not download_model_from_blob(MODEL_BLOB_URL, MODEL_PATH):
+        error_msg = "Failed to download model from Blob Storage"
+        sys.stderr.write(error_msg + '\n')
+        raise RuntimeError(error_msg)
+
+    # ============================================================================
     # maskrcnn_model_final.pth 로드
     # ============================================================================
 
     try:
+        print(f"\n[MODEL LOADING]")
         num_classes = len(mapping['damage_to_id'])
+        
+        # 모델 아키텍처 생성
         model = maskrcnn_resnet50_fpn(pretrained=True)
         in_features = model.roi_heads.box_predictor.cls_score.in_features
         model.roi_heads.box_predictor = FastRCNNPredictor(in_features, num_classes)
         in_features_mask = model.roi_heads.mask_predictor.conv5_mask.in_channels
         model.roi_heads.mask_predictor = MaskRCNNPredictor(in_features_mask, 256, num_classes)
-        model_state_dict = torch.load(MODEL_PATH, map_location='cpu', weights_only=True)
+        
+        print(f"  Loading weights from: {MODEL_PATH}")
+        
+        # 모델 가중치 로드
+        model_state_dict = torch.load(MODEL_PATH, map_location='cpu', weights_only=False)
         model.load_state_dict(model_state_dict)
         model.eval()
         
-        print(f"\n[MODEL]")
         print(f"  Classes: {num_classes}")
-        print(f"  ✓ Model loaded")
-    except Exception as e:
-        sys.stderr.write(f'모델 로드 실패 {e}')  
+        print(f"  ✓ Model loaded successfully")
         
-        #logger.error(f"모델 로드 실패: {e}")
+    except Exception as e:
+        error_msg = f"모델 로드 실패: {e}"
+        sys.stderr.write(error_msg + '\n')
+        import traceback
+        traceback.print_exc()
+        raise
         
 
     # ============================================================================

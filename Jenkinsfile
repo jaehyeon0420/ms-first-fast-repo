@@ -14,48 +14,18 @@ pipeline {
             }
         }
 	
-        stage('Checkout Code with LFS') {
-    steps {
-        script {
-            // Git 체크아웃 먼저
-            checkout([
-                $class: 'GitSCM',
-                branches: [[name: '*/master']],
-                extensions: [
-                    [$class: 'CloneOption', depth: 1, noTags: false, shallow: false],
-                    [$class: 'GitLFSPull']
-                ],
-                userRemoteConfigs: [[
+        stage('Checkout Code') {
+            steps {
+                git branch: 'master', 
                     url: 'https://github.com/jaehyeon0420/ms-first-fast-repo.git',
                     credentialsId: 'github-token'
-                ]]
-            ])
-            
-            // 파일 다운로드 (Git LFS 우회)
-            sh '''
-                # GitHub Media URL로 직접 다운로드
-                echo "Downloading model file from GitHub..."
-                curl -L -o app/model/maskrcnn_model_final.pth \
-                    "https://media.githubusercontent.com/media/jaehyeon0420/ms-first-fast-repo/master/app/model/maskrcnn_model_final.pth"
-                
-                # 파일 크기 확인
-                if [ -f "app/model/maskrcnn_model_final.pth" ]; then
-                    FILE_SIZE=$(stat -c%s "app/model/maskrcnn_model_final.pth" 2>/dev/null || stat -f%z "app/model/maskrcnn_model_final.pth")
-                    echo "Model file size: $FILE_SIZE bytes"
                     
-                    if [ "$FILE_SIZE" -lt 1000 ]; then
-                        echo "ERROR: Model file is too small"
-                        exit 1
-                    fi
-                    echo "✓ Model file downloaded successfully"
-                else
-                    echo "ERROR: Model file not found!"
-                    exit 1
-                fi
-            '''
+                sh '''
+                    echo "Code checked out successfully"
+                    echo "Model will be downloaded from Azure Blob Storage at runtime"
+                '''
+            }
         }
-    }
-}
 
         stage('Build Docker Image') {
             steps {
