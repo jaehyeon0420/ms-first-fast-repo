@@ -22,7 +22,8 @@ pipeline {
                 $class: 'GitSCM',
                 branches: [[name: '*/master']],
                 extensions: [
-                    [$class: 'CloneOption', depth: 1, noTags: false, shallow: false]
+                    [$class: 'CloneOption', depth: 1, noTags: false, shallow: false],
+                    [$class: 'GitLFSPull']
                 ],
                 userRemoteConfigs: [[
                     url: 'https://github.com/jaehyeon0420/ms-first-fast-repo.git',
