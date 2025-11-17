@@ -11,13 +11,9 @@ import os
 import numpy as np
 import math
 from PIL import Image, ImageDraw, ImageFont
+import platform
 from pathlib import Path
 import sys
-
-import urllib.request
-import urllib.error
-from app.core.config import settings
-MODEL_BLOB_URL = settings.MODEL_BLOB_URL
 
 
 # ============================================================================
@@ -38,6 +34,7 @@ RESULT_PATH = APP_PATH / "ml_outputs"
 # 추론 설정
 CONFIDENCE_THRESHOLD = 0.30
 NMS_THRESHOLD = 0.5
+OVERLAP_IOU_THRESHOLD = 0.3  # 겹침 판단 기준 (30% 이상 겹치면 겹친 것으로 판단)
 MAX_DETECTIONS = 10
 
 # 비용 설정 (px²당 원)
@@ -67,66 +64,85 @@ VISUALIZATION_CONFIG = {
 }
 
 # ============================================================================
-# 모델 다운로드 함수
+# 겹침 제거 (더 큰 영역 우선)
 # ============================================================================
 
-def download_model_from_blob(blob_url, save_path):
-    """Azure Blob Storage에서 모델 다운로드"""
+def calculate_iou(box1, box2):
+    """두 박스의 IoU 계산"""
+    x1_1, y1_1, x2_1, y2_1 = box1
+    x1_2, y1_2, x2_2, y2_2 = box2
     
-    # 이미 파일이 있고 크기가 정상이면 스킵
-    if save_path.exists():
-        file_size = save_path.stat().st_size
-        if file_size > 100_000_000:  # 100MB 이상이면 정상
-            print(f"  ✓ Model file already exists: {save_path}")
-            print(f"  File size: {file_size:,} bytes ({file_size / 1024 / 1024:.1f} MB)")
-            return True
-        else:
-            print(f"  ⚠ Existing file is too small ({file_size} bytes), redownloading...")
-            save_path.unlink()
+    # 교집합 영역
+    inter_x1 = max(x1_1, x1_2)
+    inter_y1 = max(y1_1, y1_2)
+    inter_x2 = min(x2_1, x2_2)
+    inter_y2 = min(y2_1, y2_2)
     
-    # 다운로드
-    print(f"\n[DOWNLOADING MODEL FROM BLOB STORAGE]")
-    print(f"  URL: {blob_url[:50]}...")
-    print(f"  Destination: {save_path}")
+    inter_area = max(0, inter_x2 - inter_x1) * max(0, inter_y2 - inter_y1)
     
-    try:
-        # 디렉토리 생성
-        save_path.parent.mkdir(parents=True, exist_ok=True)
-        
-        # 진행률 표시 함수
-        def reporthook(block_num, block_size, total_size):
-            downloaded = block_num * block_size
-            if total_size > 0:
-                percent = min(downloaded * 100.0 / total_size, 100)
-                mb_downloaded = downloaded / 1024 / 1024
-                mb_total = total_size / 1024 / 1024
-                sys.stdout.write(f"\r  Progress: {percent:.1f}% ({mb_downloaded:.1f}/{mb_total:.1f} MB)")
-                sys.stdout.flush()
-        
-        # 다운로드 실행
-        urllib.request.urlretrieve(blob_url, save_path, reporthook)
-        print()  # 줄바꿈
-        
-        # 검증
-        file_size = save_path.stat().st_size
-        print(f"  ✓ Download complete: {file_size:,} bytes ({file_size / 1024 / 1024:.1f} MB)")
-        
-        if file_size < 1000:
-            raise ValueError(f"Downloaded file is too small ({file_size} bytes)")
-        
-        return True
-        
-    except urllib.error.URLError as e:
-        print(f"  ✗ URL Error: {e}")
-        print(f"  Please check your MODEL_BLOB_URL")
-        return False
-    except Exception as e:
-        print(f"  ✗ Download failed: {e}")
-        if save_path.exists():
-            save_path.unlink()
-        return False
+    # 합집합 영역
+    box1_area = (x2_1 - x1_1) * (y2_1 - y1_1)
+    box2_area = (x2_2 - x1_2) * (y2_2 - y1_2)
+    union_area = box1_area + box2_area - inter_area
     
+    if union_area == 0:
+        return 0
     
+    return inter_area / union_area
+
+def filter_overlapping_boxes(boxes, scores, labels, iou_threshold=0.3):
+    """
+    겹치는 박스들 중 더 큰 영역을 가진 박스만 유지
+    
+    Args:
+        boxes: numpy array of boxes [N, 4]
+        scores: numpy array of scores [N]
+        labels: numpy array of labels [N]
+        iou_threshold: IoU 임계값 (이 값 이상이면 겹친 것으로 판단)
+    
+    Returns:
+        keep_indices: 유지할 박스의 인덱스 리스트
+    """
+    if len(boxes) == 0:
+        return []
+    
+    boxes = np.array(boxes)
+    scores = np.array(scores)
+    labels = np.array(labels)
+    
+    # 각 박스의 면적 계산
+    areas = (boxes[:, 2] - boxes[:, 0]) * (boxes[:, 3] - boxes[:, 1])
+    
+    # 처리할 박스들의 인덱스 (처음엔 모든 박스)
+    remaining_indices = list(range(len(boxes)))
+    keep_indices = []
+    
+    while remaining_indices:
+        # 남은 박스들 중 가장 큰 영역을 가진 박스 선택
+        max_area_idx = max(remaining_indices, key=lambda i: areas[i])
+        keep_indices.append(max_area_idx)
+        
+        # 선택된 박스와 겹치는 박스들 찾기
+        current_box = boxes[max_area_idx]
+        overlapping_indices = []
+        
+        for idx in remaining_indices:
+            if idx == max_area_idx:
+                continue
+            
+            iou = calculate_iou(current_box, boxes[idx])
+            
+            if iou >= iou_threshold:
+                overlapping_indices.append(idx)
+        
+        # 선택된 박스와 겹치는 박스들을 제거 목록에 추가
+        remaining_indices.remove(max_area_idx)
+        for idx in overlapping_indices:
+            if idx in remaining_indices:
+                remaining_indices.remove(idx)
+    
+    return keep_indices
+
 # ============================================================================
 # 색상 맵
 # ============================================================================
@@ -147,75 +163,45 @@ def get_color_by_confidence(confidence):
 # ============================================================================
 
 def get_system_font(size=16):
-    """운영체제별 시스템 폰트 자동 선택"""
-    import platform
-    
+    """운영체제별 한글 지원 폰트 자동 선택"""
     system = platform.system()
     
-    # Windows
     if system == 'Windows':
         font_paths = [
-            r'C:\Windows\Fonts\arial.ttf',
-            r'C:\Windows\Fonts\malgunbd.ttf',  # 한글
+            r'C:\Windows\Fonts\malgun.ttf',      # 맑은 고딕
+            r'C:\Windows\Fonts\malgunbd.ttf',    # 맑은 고딕 Bold
+            r'C:\Windows\Fonts\gulim.ttc',       # 굴림
+            r'C:\Windows\Fonts\batang.ttc',      # 바탕
+            r'C:\Windows\Fonts\NanumGothic.ttf', # 나눔고딕
+            r'C:\Windows\Fonts\arial.ttf',       # Arial (fallback)
         ]
-    # macOS
     elif system == 'Darwin':
         font_paths = [
+            '/Library/Fonts/AppleGothic.ttf',
+            '/System/Library/Fonts/AppleSDGothicNeo.ttc',
+            '/Library/Fonts/Arial Unicode.ttf',
             '/Library/Fonts/Arial.ttf',
-            '/System/Library/Fonts/Helvetica.ttc',
         ]
-    # Linux
     else:
         font_paths = [
-            '/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf',
             '/usr/share/fonts/truetype/noto/NotoSansCJK-Regular.ttc',
+            '/usr/share/fonts/truetype/nanum/NanumGothic.ttf',
+            '/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf',
         ]
     
+    # 폰트 찾기
     for font_path in font_paths:
         try:
             if os.path.exists(font_path):
-                return ImageFont.truetype(font_path, size)
-        except:
-            pass
+                font = ImageFont.truetype(font_path, size)
+                print(f"  Using font: {os.path.basename(font_path)}")
+                return font
+        except Exception as e:
+            continue
     
-    # 기본 폰트로 폴백
+    # 모든 폰트 실패 시 기본 폰트
+    print(f"  Warning: Using default font (Korean may not display correctly)")
     return ImageFont.load_default()
-
-
-# ============================================================================
-# NMS (겹침 제거)
-# ============================================================================
-def nms_boxes(boxes, scores, threshold=0.5):
-    """겹치는 박스 제거"""
-    boxes = np.array(boxes)
-    scores = np.array(scores)
-    sorted_idx = np.argsort(-scores)
-    keep = []
-    
-    while len(sorted_idx) > 0:
-        current_idx = sorted_idx[0]
-        keep.append(current_idx)
-        
-        if len(sorted_idx) == 1:
-            break
-        
-        current_box = boxes[current_idx]
-        other_boxes = boxes[sorted_idx[1:]]
-        
-        inter_x1 = np.maximum(current_box[0], other_boxes[:, 0])
-        inter_y1 = np.maximum(current_box[1], other_boxes[:, 1])
-        inter_x2 = np.minimum(current_box[2], other_boxes[:, 2])
-        inter_y2 = np.minimum(current_box[3], other_boxes[:, 3])
-        
-        inter_area = np.maximum(0, inter_x2 - inter_x1) * np.maximum(0, inter_y2 - inter_y1)
-        box1_area = (current_box[2] - current_box[0]) * (current_box[3] - current_box[1])
-        box2_area = (other_boxes[:, 2] - other_boxes[:, 0]) * (other_boxes[:, 3] - other_boxes[:, 1])
-        union_area = box1_area + box2_area - inter_area
-        
-        iou = inter_area / union_area
-        sorted_idx = sorted_idx[1:][iou < threshold]
-    
-    return keep
 
 
 def estimate_torch_vision(cv_response_json) :
@@ -235,50 +221,27 @@ def estimate_torch_vision(cv_response_json) :
         
 
     # ============================================================================
-    # 모델 다운로드 (Blob Storage에서)
-    # ============================================================================
-    
-    print(f"\n[MODEL DOWNLOAD CHECK]")
-    print(f"  Model path: {MODEL_PATH}")
-    print(f"  Blob URL configured: {MODEL_BLOB_URL != 'YOUR_BLOB_URL_HERE'}")
-    
-    # Blob Storage에서 다운로드
-    if not download_model_from_blob(MODEL_BLOB_URL, MODEL_PATH):
-        error_msg = "Failed to download model from Blob Storage"
-        sys.stderr.write(error_msg + '\n')
-        raise RuntimeError(error_msg)
-
-    # ============================================================================
     # maskrcnn_model_final.pth 로드
     # ============================================================================
 
     try:
-        print(f"\n[MODEL LOADING]")
         num_classes = len(mapping['damage_to_id'])
-        
-        # 모델 아키텍처 생성
         model = maskrcnn_resnet50_fpn(pretrained=True)
         in_features = model.roi_heads.box_predictor.cls_score.in_features
         model.roi_heads.box_predictor = FastRCNNPredictor(in_features, num_classes)
         in_features_mask = model.roi_heads.mask_predictor.conv5_mask.in_channels
         model.roi_heads.mask_predictor = MaskRCNNPredictor(in_features_mask, 256, num_classes)
-        
-        print(f"  Loading weights from: {MODEL_PATH}")
-        
-        # 모델 가중치 로드
         model_state_dict = torch.load(MODEL_PATH, map_location='cpu', weights_only=False)
         model.load_state_dict(model_state_dict)
         model.eval()
         
+        print(f"\n[MODEL]")
         print(f"  Classes: {num_classes}")
-        print(f"  ✓ Model loaded successfully")
-        
+        print(f"  ✓ Model loaded")
     except Exception as e:
-        error_msg = f"모델 로드 실패: {e}"
-        sys.stderr.write(error_msg + '\n')
-        import traceback
-        traceback.print_exc()
-        raise
+        sys.stderr.write(f'모델 로드 실패 {e}')  
+        
+        #logger.error(f"모델 로드 실패: {e}")
         
 
     # ============================================================================
@@ -344,29 +307,32 @@ def estimate_torch_vision(cv_response_json) :
         
         print(f"  After confidence filter: {len(labels_filtered)}")
         
-        # NMS
+        # 2단계: 겹치는 박스 제거 (더 큰 영역 우선)
         if len(boxes_filtered) > 0:
-            keep_idx = nms_boxes(boxes_filtered, scores_filtered, NMS_THRESHOLD)
-            boxes_nms = boxes_filtered[keep_idx]
-            labels_nms = labels_filtered[keep_idx]
-            scores_nms = scores_filtered[keep_idx]
+            keep_idx = filter_overlapping_boxes(
+                boxes_filtered, 
+                scores_filtered, 
+                labels_filtered, 
+                OVERLAP_IOU_THRESHOLD
+            )
+            boxes_final = boxes_filtered[keep_idx]
+            labels_final = labels_filtered[keep_idx]
+            scores_final = scores_filtered[keep_idx]
+            
+            print(f"  After overlap removal (larger area priority): {len(labels_final)}")
         else:
-            boxes_nms = boxes_filtered
-            labels_nms = labels_filtered
-            scores_nms = scores_filtered
+            boxes_final = boxes_filtered
+            labels_final = labels_filtered
+            scores_final = scores_filtered
         
-        print(f"  After NMS: {len(labels_nms)}")
-        
-        # 상위 N개
-        if len(labels_nms) > MAX_DETECTIONS:
-            top_idx = np.argsort(-scores_nms)[:MAX_DETECTIONS]
-            boxes_final = boxes_nms[top_idx]
-            labels_final = labels_nms[top_idx]
-            scores_final = scores_nms[top_idx]
-        else:
-            boxes_final = boxes_nms
-            labels_final = labels_nms
-            scores_final = scores_nms
+        # 3단계: 상위 N개로 제한
+        if len(labels_final) > MAX_DETECTIONS:
+            areas = (boxes_final[:, 2] - boxes_final[:, 0]) * (boxes_final[:, 3] - boxes_final[:, 1])
+            top_idx = np.argsort(-areas)[:MAX_DETECTIONS]
+            boxes_final = boxes_final[top_idx]
+            labels_final = labels_final[top_idx]
+            scores_final = scores_final[top_idx]
+            print(f"  Limited to top {MAX_DETECTIONS} by area")
         
         print(f"  Final detections: {len(labels_final)}")
         
@@ -387,6 +353,10 @@ def estimate_torch_vision(cv_response_json) :
                     "y2": int(y2)
                 }
             })
+            
+            
+        # 영역 크기 순으로 정렬
+        model2_results.sort(key=lambda x: x["area"], reverse=True)
         
     except Exception as e:
         sys.stderr.write(f'Detection 추론 실패: {e}')  
@@ -484,53 +454,74 @@ def estimate_torch_vision(cv_response_json) :
         sys.stderr.write(f'시스템 폰트 로드 실패: {e}')  
         print('시스템 폰트 로드 실패')
         
+    total_min = sum(r["min_cost"] for r in results)
+    total_max = sum(r["max_cost"] for r in results)
+    total_rec = sum(r["recommended_cost"] for r in results)
     
     # 박스 및 텍스트 그리기
-    for i, (label, score, box) in enumerate(zip(labels_final, scores_final, boxes_final)):
-        damage_type = mapping['id_to_damage'].get(str(label), 'Unknown')
-        confidence = score * 100
+    for i, result in enumerate(results):
+        bbox = result["bbox"]
+        confidence = result["confidence"]["model2_conf"]
+        damage_type_kr = result["type_kr"]
+        area = result["area"]
         
         # 스케일 적용
-        x1, y1, x2, y2 = (box * upscale_factor).astype(int)
+        x1 = int(bbox["x1"] * upscale_factor)
+        y1 = int(bbox["y1"] * upscale_factor)
+        x2 = int(bbox["x2"] * upscale_factor)
+        y2 = int(bbox["y2"] * upscale_factor)
         
         # 색상
-        color = get_color_by_confidence(score)
+        color = get_color_by_confidence(confidence)
         
-        # 박스 색상 정보 #000000 형식으로 변환하여 저장
-        results[i]['color'] = "#{:02X}{:02X}{:02X}".format(*color)
-        
-        
-        # ★ 박스 그리기 (굵게)
+        # 박스 그리기
         box_width = VISUALIZATION_CONFIG['box_width']
         draw.rectangle([x1, y1, x2, y2], outline=color, width=box_width)
         
-        # ★ 텍스트 준비
-        label_text = f"{damage_type} {confidence:.1f}%"
+        # 텍스트 준비
+        label_text = f"{damage_type_kr} {confidence*100:.1f}%"
+        cost_text = f"{result['recommended_cost']:,}원"
         
-        # ★ 텍스트 배경 (명시적)
+        # 텍스트 배경
         text_offset_y = VISUALIZATION_CONFIG['text_offset_y']
-        text_y = max(0, y1 - text_offset_y)  # 위에 표시
+        text_y = max(0, y1 - text_offset_y)
         
-        bbox = draw.textbbox((x1, text_y), label_text, font=font)
+        bbox_text = draw.textbbox((x1, text_y), label_text, font=font)
         padding = VISUALIZATION_CONFIG['text_bg_padding']
         
         # 배경 박스
         bg_bbox = [
-            bbox[0] - padding,
-            bbox[1] - padding,
-            bbox[2] + padding,
-            bbox[3] + padding
+            bbox_text[0] - padding,
+            bbox_text[1] - padding,
+            bbox_text[2] + padding,
+            bbox_text[3] + padding
         ]
         draw.rectangle(bg_bbox, fill=color)
         
-        # 텍스트 (흰색, 명시적)
+        # 텍스트 (흰색)
         draw.text((x1, text_y), label_text, fill=(255, 255, 255), font=font)
+        
+        # 비용 텍스트 (박스 내부 하단)
+        cost_y = y2 - 25
+        draw.text((x1 + 5, cost_y), cost_text, fill=color, font=font)
         
         # 박스 번호 (우측 상단)
         number_text = f"#{i+1}"
         draw.text((x2 - 40, y1 + 5), number_text, fill=color, font=font)
     
-    # 이미지 저장
+    
+    # 총 견적 정보 추가 (이미지 상단)
+    summary_text = f"총 견적: {total_rec:,}원 ({len(results)}개 손상)"
+    summary_bg_bbox = draw.textbbox((10, 10), summary_text, font=font)
+    draw.rectangle([
+        summary_bg_bbox[0] - 10,
+        summary_bg_bbox[1] - 10,
+        summary_bg_bbox[2] + 10,
+        summary_bg_bbox[3] + 10
+    ], fill=(0, 0, 0))
+    draw.text((10, 10), summary_text, fill=(255, 255, 255), font=font)
+    
+    # 업스케일 버전저장       
     name, ext = os.path.splitext(cv_response_json['image_file'])
     jpg_filename = f"{name}_image.jpg"
     viz_path = RESULT_PATH / jpg_filename
@@ -552,9 +543,7 @@ def estimate_torch_vision(cv_response_json) :
         print()
 
     # 총계
-    total_min = sum(r["min_cost"] for r in results)
-    total_max = sum(r["max_cost"] for r in results)
-    total_rec = sum(r["recommended_cost"] for r in results)
+    
 
     print("=== 총 견적 ===")
     print(f"최소 견적: {total_min:,}원")
