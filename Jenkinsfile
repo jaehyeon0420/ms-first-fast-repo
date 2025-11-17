@@ -15,55 +15,52 @@ pipeline {
         }
 	
         stage('Checkout Code with LFS') {
-            steps {
-                script {
-                    // Git LFS 설치 확인 및 설치
-                    sh '''
-                        if ! command -v git-lfs &> /dev/null; then
-                            echo "Git LFS not found. Installing..."
-                            curl -s https://packagecloud.io/install/repositories/github/git-lfs/script.deb.sh | sudo bash
-                            sudo apt-get install git-lfs -y
-                        fi
-                        
-                        # Git LFS 초기화
-                        git lfs install
-                    '''
+    steps {
+        script {
+            // Git 체크아웃 먼저
+            checkout([
+                $class: 'GitSCM',
+                branches: [[name: '*/master']],
+                extensions: [
+                    [$class: 'CloneOption', depth: 1, noTags: false, shallow: false]
+                ],
+                userRemoteConfigs: [[
+                    url: 'https://github.com/jaehyeon0420/ms-first-fast-repo.git',
+                    credentialsId: 'github-token'
+                ]]
+            ])
+            
+            // Git LFS 확인 및 파일 다운로드
+            sh '''
+                # Git LFS 설치되어 있는지 확인
+                if command -v git-lfs &> /dev/null; then
+                    echo "Git LFS found. Pulling LFS files..."
+                    git lfs install
+                    git lfs pull
+                else
+                    echo "Git LFS not found. Trying direct download..."
+                    # GitHub Media URL로 직접 다운로드
+                    curl -L -o app/model/maskrcnn_model_final.pth \
+                        "https://media.githubusercontent.com/media/jaehyeon0420/ms-first-fast-repo/master/app/model/maskrcnn_model_final.pth"
+                fi
+                
+                # 파일 크기 확인
+                if [ -f "app/model/maskrcnn_model_final.pth" ]; then
+                    FILE_SIZE=$(stat -c%s "app/model/maskrcnn_model_final.pth" 2>/dev/null || stat -f%z "app/model/maskrcnn_model_final.pth")
+                    echo "Model file size: $FILE_SIZE bytes"
                     
-                    // Git 체크아웃
-                    checkout([
-                        $class: 'GitSCM',
-                        branches: [[name: '*/master']],
-                        extensions: [
-                            [$class: 'CloneOption', depth: 1, noTags: true, shallow: true],
-                            [$class: 'GitLFSPull']  // Git LFS 파일 자동 다운로드
-                        ],
-                        userRemoteConfigs: [[
-                            url: 'https://github.com/jaehyeon0420/ms-first-fast-repo.git'
-                        ]]
-                    ])
-                    
-                    // LFS 파일 다운로드 확인
-                    sh '''
-                        echo "Checking LFS files..."
-                        git lfs ls-files
-                        
-                        # .pth 파일 크기 확인 (포인터 파일이면 작음)
-                        if [ -f "app/model/maskrcnn_model_final.pth" ]; then
-                            FILE_SIZE=$(stat -c%s "app/model/maskrcnn_model_final.pth" 2>/dev/null || stat -f%z "app/model/maskrcnn_model_final.pth")
-                            echo "Model file size: $FILE_SIZE bytes"
-                            
-                            if [ "$FILE_SIZE" -lt 1000 ]; then
-                                echo "ERROR: Model file is too small (likely LFS pointer file)"
-                                exit 1
-                            fi
-                        else
-                            echo "ERROR: Model file not found!"
-                            exit 1
-                        fi
-                    '''
-                }
-            }
+                    if [ "$FILE_SIZE" -lt 1000 ]; then
+                        echo "ERROR: Model file is too small (likely LFS pointer file)"
+                        exit 1
+                    fi
+                else
+                    echo "ERROR: Model file not found!"
+                    exit 1
+                fi
+            '''
         }
+    }
+}
 
         stage('Build Docker Image') {
             steps {
