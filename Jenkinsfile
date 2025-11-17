@@ -30,19 +30,12 @@ pipeline {
                 ]]
             ])
             
-            // Git LFS 확인 및 파일 다운로드
+            // 파일 다운로드 (Git LFS 우회)
             sh '''
-                # Git LFS 설치되어 있는지 확인
-                if command -v git-lfs &> /dev/null; then
-                    echo "Git LFS found. Pulling LFS files..."
-                    git lfs install
-                    git lfs pull
-                else
-                    echo "Git LFS not found. Trying direct download..."
-                    # GitHub Media URL로 직접 다운로드
-                    curl -L -o app/model/maskrcnn_model_final.pth \
-                        "https://media.githubusercontent.com/media/jaehyeon0420/ms-first-fast-repo/master/app/model/maskrcnn_model_final.pth"
-                fi
+                # GitHub Media URL로 직접 다운로드
+                echo "Downloading model file from GitHub..."
+                curl -L -o app/model/maskrcnn_model_final.pth \
+                    "https://media.githubusercontent.com/media/jaehyeon0420/ms-first-fast-repo/master/app/model/maskrcnn_model_final.pth"
                 
                 # 파일 크기 확인
                 if [ -f "app/model/maskrcnn_model_final.pth" ]; then
@@ -50,9 +43,10 @@ pipeline {
                     echo "Model file size: $FILE_SIZE bytes"
                     
                     if [ "$FILE_SIZE" -lt 1000 ]; then
-                        echo "ERROR: Model file is too small (likely LFS pointer file)"
+                        echo "ERROR: Model file is too small"
                         exit 1
                     fi
+                    echo "✓ Model file downloaded successfully"
                 else
                     echo "ERROR: Model file not found!"
                     exit 1
