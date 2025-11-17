@@ -13,17 +13,10 @@ pipeline {
                 cleanWs()
             }
         }
-	
+
         stage('Checkout Code') {
             steps {
-                git branch: 'master', 
-                    url: 'https://github.com/jaehyeon0420/ms-first-fast-repo.git',
-                    credentialsId: 'github-token'
-                    
-                sh '''
-                    echo "Code checked out successfully"
-                    echo "Model will be downloaded from Azure Blob Storage at runtime"
-                '''
+                git branch: 'master', url: 'https://github.com/jaehyeon0420/ms-first-fast-repo.git'
             }
         }
 
