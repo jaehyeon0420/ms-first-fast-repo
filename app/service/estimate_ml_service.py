@@ -180,7 +180,7 @@ def estimate_torch_vision(cv_response_json) :
         model.roi_heads.box_predictor = FastRCNNPredictor(in_features, num_classes)
         in_features_mask = model.roi_heads.mask_predictor.conv5_mask.in_channels
         model.roi_heads.mask_predictor = MaskRCNNPredictor(in_features_mask, 256, num_classes)
-        model_state_dict = torch.load(MODEL_PATH, map_location='cpu', weights_only=False)
+        model_state_dict = torch.load(MODEL_PATH, map_location='cpu', weights_only=True)
         model.load_state_dict(model_state_dict)
         model.eval()
         
