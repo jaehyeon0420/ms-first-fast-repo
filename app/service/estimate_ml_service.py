@@ -473,6 +473,7 @@ def estimate_torch_vision(cv_response_json) :
         
         # 색상
         color = get_color_by_confidence(confidence)
+        results[i]['color'] = '#{:02x}{:02x}{:02x}'.format(*color)
         
         # 박스 그리기
         box_width = VISUALIZATION_CONFIG['box_width']
