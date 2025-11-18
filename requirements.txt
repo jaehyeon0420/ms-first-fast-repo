@@ -4,5 +4,5 @@ matplotlib
 fastapi[all]
 uvicorn[standard]
 numpy==2.3.3
-torch==2.9.1
-torchvision==0.24.1
+torch==2.9.1+cpu
+torchvision==0.24.1+cpu
